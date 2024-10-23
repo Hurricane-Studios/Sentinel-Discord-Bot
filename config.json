@@ -1,0 +1,4 @@
+{
+    "prefix": "!",
+    "blacklisted": ["badword1", "badword2", "badword3"]
+}
