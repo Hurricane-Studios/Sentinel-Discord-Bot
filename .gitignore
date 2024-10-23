@@ -11,8 +11,8 @@ yarn-error.log*
 
 # Ignore package lock files if you prefer only `package.json`
 # Uncomment the below lines if you don't want to commit lock files
-package-lock.json
-yarn.lock
+# package-lock.json
+# yarn.lock
 
 # Ignore system files
 .DS_Store
