@@ -1,0 +1,3 @@
+# Ignore other sensitive config files
+config.json
+.env
