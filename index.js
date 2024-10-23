@@ -1,26 +1,29 @@
-require('dotenv').config(); // Load environment variables
-const { handleCommands } = require('./commands'); // Import commands logic
-const { handlePunishment } = require('./punishment'); // Import punishment logic
+require('dotenv').config();
+const { Client, GatewayIntentBits, Events } = require('discord.js');
+const { warnCommand, clearWarnCommand, registerCommandsForGuilds } = require('./commands'); // Ensure all functions are imported
 
-console.log(`Token: ${process.env.DISCORD_TOKEN ? 'Loaded' : 'Not Loaded'}`); // Debug log
-
-const { Client, GatewayIntentBits } = require('discord.js');
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers]
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMembers
+    ]
 });
 
-// Triggered when the bot is online
-client.once('ready', () => {
+client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
+    await registerCommandsForGuilds(client); // Register slash commands dynamically
 });
 
-// Listen for messages and handle commands or punishment logic
-client.on('messageCreate', async (message) => {
-    if (!message.author.bot) { // Ignore bot messages
-        handleCommands(message); // Handle commands
-        await handlePunishment(message); // Check for punishments
+client.on(Events.InteractionCreate, async interaction => {
+    if (!interaction.isCommand()) return;
+
+    const { commandName } = interaction;
+
+    if (commandName === 'warn') {
+        await warnCommand(interaction); // Ensure this function is correctly imported
+    } else if (commandName === 'clearwarn') {
+        await clearWarnCommand(interaction); // Ensure this function is correctly imported
     }
 });
 
-// Login with the token from the .env file
 client.login(process.env.DISCORD_TOKEN);
