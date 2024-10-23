@@ -3,7 +3,9 @@ const path = require('path');
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 require('dotenv').config();
 
+// Paths for the JSON files
 const warningsPath = path.join(__dirname, 'warnings.json');
+const configPath = path.join(__dirname, 'config.json');
 
 // Load warnings from JSON
 function loadWarnings() {
@@ -15,6 +17,18 @@ function loadWarnings() {
 // Save warnings to JSON
 function saveWarnings(warnings) {
     fs.writeFileSync(warningsPath, JSON.stringify(warnings, null, 2));
+}
+
+// Load config from JSON
+function loadConfig() {
+    if (!fs.existsSync(configPath)) return { blacklistedWords: [] };
+    const data = fs.readFileSync(configPath, 'utf-8');
+    return JSON.parse(data);
+}
+
+// Save config to JSON
+function saveConfig(config) {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 
 // Handle /warn command
@@ -38,7 +52,7 @@ async function warnCommand(interaction) {
 // Handle /clearwarn command with the option to remove a specific number of warnings
 async function clearWarnCommand(interaction) {
     const targetUser = interaction.options.getUser('user');
-    const warnAmount = interaction.options.getInteger('amount') || 0; // Default to 0, meaning remove all warnings
+    const warnAmount = interaction.options.getInteger('amount') || 0;
 
     if (!targetUser) {
         return interaction.reply('Please mention a valid user to clear warnings for.', { ephemeral: true });
@@ -48,19 +62,34 @@ async function clearWarnCommand(interaction) {
     const userId = targetUser.id;
 
     if (warnAmount <= 0 || !warnings[userId]) {
-        // If no amount is provided or warnings are 0 or less, clear all warnings
         warnings[userId] = 0;
         await interaction.reply(`All warnings for <@${userId}> have been cleared.`);
     } else {
-        // Remove the specified amount of warnings
-        warnings[userId] = Math.max(0, warnings[userId] - warnAmount); // Ensure warnings don't go below 0
+        warnings[userId] = Math.max(0, warnings[userId] - warnAmount);
         await interaction.reply(`<@${userId}> has had ${warnAmount} warning(s) removed. They now have ${warnings[userId]} warning(s).`);
     }
 
     saveWarnings(warnings);
 }
 
-// Define slash commands with additional "amount" option for /clearwarn
+// Handle /addblacklistedwords command
+async function addBlacklistedWordsCommand(interaction) {
+    const words = interaction.options.getString('words');
+    if (!words) {
+        return interaction.reply('Please provide words to add to the blacklist.', { ephemeral: true });
+    }
+
+    const config = loadConfig();
+    const newWords = words.split(/\s+/); // Split by spaces
+
+    // Add new words to the blacklist (avoid duplicates)
+    config.blacklistedWords = [...new Set([...config.blacklistedWords, ...newWords])];
+    saveConfig(config);
+
+    await interaction.reply(`The following words have been added to the blacklist: ${newWords.join(', ')}`);
+}
+
+// Define slash commands
 const commands = [
     new SlashCommandBuilder()
         .setName('warn')
@@ -80,7 +109,15 @@ const commands = [
         .addIntegerOption(option =>
             option.setName('amount')
                 .setDescription('The amount of warnings to remove. Leave empty to clear all.')
-                .setRequired(false)) // Optional amount to remove
+                .setRequired(false)),
+
+    new SlashCommandBuilder()
+        .setName('addblacklistedwords')
+        .setDescription('Add words to the blacklist')
+        .addStringOption(option =>
+            option.setName('words')
+                .setDescription('The words to blacklist, separated by spaces')
+                .setRequired(true))
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -90,7 +127,7 @@ async function registerCommandsForGuilds(client) {
     try {
         console.log('Started refreshing application (/) commands.');
 
-        const guilds = await client.guilds.fetch(); // Fetch all connected guilds
+        const guilds = await client.guilds.fetch();
 
         guilds.forEach(async guild => {
             const guildId = guild.id;
@@ -107,4 +144,9 @@ async function registerCommandsForGuilds(client) {
     }
 }
 
-module.exports = { warnCommand, clearWarnCommand, registerCommandsForGuilds };
+module.exports = { 
+    warnCommand, 
+    clearWarnCommand, 
+    addBlacklistedWordsCommand, 
+    registerCommandsForGuilds 
+};
