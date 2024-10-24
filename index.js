@@ -7,6 +7,7 @@ const {
     clearBlacklistCommand, 
     currentBlacklistCommand, 
     automodToggleCommand, 
+    currentWarnsCommand,
     registerCommandsForGuilds 
 } = require('./commands');
 const { handleAutoModMessage } = require('./automod');
@@ -33,6 +34,7 @@ client.once('ready', async () => {
         console.error('Error during startup:', error);
     }
 });
+
 
 // Register commands when the bot joins a new guild and restart the bot
 client.on(Events.GuildCreate, async guild => {
@@ -63,7 +65,7 @@ function restartBot() {
             return;
         }
         console.log(`Stdout: ${stdout}`);
-        console.log('Bot has finished restarting and has loaded.');
+        console.log('Bot has finished restarting and has loaded.'); // Log restart message
         process.exit(0);
     });
 }
@@ -84,6 +86,9 @@ client.on(Events.InteractionCreate, async interaction => {
                 break;
             case 'addblacklistedwords':
                 await addBlacklistedWordsCommand(interaction);
+                break;
+            case 'currentwarns': // Ensure this matches the command defined in commands.js
+                await currentWarnsCommand(interaction);
                 break;
             case 'clearblacklist':
                 await clearBlacklistCommand(interaction);

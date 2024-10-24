@@ -20,7 +20,8 @@ async function getStatusMessage() {
 async function setBotStatus(client) {
     try {
         const statusMessage = await getStatusMessage();
-        client.user.setActivity(statusMessage, { type: 'WATCHING' });
+        // Use await to ensure the promise resolves
+        await client.user.setActivity(statusMessage, { type: 'WATCHING' });
         console.log(`Status set to: ${statusMessage}`);
     } catch (error) {
         console.error('Error setting status:', error);

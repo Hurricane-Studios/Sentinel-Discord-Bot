@@ -26,7 +26,6 @@ async function saveConfig(config) {
     }
 }
 
-
 // Ensure that the guild has a default configuration
 async function ensureGuildConfig(guildId) {
     const config = await loadConfig();
@@ -124,6 +123,18 @@ async function clearWarnCommand(interaction) {
     await interaction.reply(`Warnings for <@${userId}> have been cleared.`);
 }
 
+async function currentWarnsCommand(interaction) {
+    const guildId = interaction.guildId;
+    const userId = interaction.options.getUser('user').id;
+
+    // Ensure the guild configuration is loaded
+    const config = await ensureGuildConfig(guildId);
+    const warnings = config.warnedUsers[userId] || 0;
+
+    // Send the response with the user's warning count
+    await interaction.reply(`**<@${userId}>** warn(s): ${warnings}`);
+}
+
 // Command Handler: Add blacklisted words command
 async function addBlacklistedWordsCommand(interaction) {
     try {
@@ -192,6 +203,11 @@ const commands = [
     new SlashCommandBuilder().setName('currentblacklist').setDescription('Show the current blacklist'),
 
     new SlashCommandBuilder()
+        .setName('currentwarns')
+        .setDescription('Show the warning count for a user')
+        .addUserOption(option => option.setName('user').setDescription('The user to check warnings for').setRequired(true)),
+
+    new SlashCommandBuilder()
         .setName('automod')
         .setDescription('Toggle automod on or off')
         .addStringOption(option => option.setName('toggle').setDescription('Enable (y) or disable (n)').setRequired(true)),
@@ -227,7 +243,6 @@ async function registerCommandsForGuilds(client, guildId = null) {
     }
 }
 
-
 module.exports = {
     warnCommand,
     clearWarnCommand,
@@ -235,5 +250,6 @@ module.exports = {
     clearBlacklistCommand,
     currentBlacklistCommand,
     automodToggleCommand,
+    currentWarnsCommand,
     registerCommandsForGuilds,
 };
