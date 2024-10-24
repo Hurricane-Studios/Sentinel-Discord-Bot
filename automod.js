@@ -8,10 +8,12 @@ const configPath = path.join(__dirname, 'serverConfigs.json');
 async function loadConfig() {
     try {
         const data = await fs.readFile(configPath, 'utf-8');
-        return JSON.parse(data);
+        const config = JSON.parse(data);
+        if (!config.servers) config.servers = {}; // Ensure servers object exists
+        return config;
     } catch (error) {
         console.error('Failed to load server configs:', error);
-        return { servers: {} }; // Return a default object if loading fails
+        return { servers: {} }; // Default to an empty structure
     }
 }
 
@@ -33,7 +35,7 @@ async function ensureGuildConfig(guildId) {
             blacklistedWords: [],
             warnedUsers: {}
         };
-        await saveConfig(config); // Save the new config to file
+        await saveConfig(config); // Save the new guild configuration
     }
     return config.servers[guildId];
 }
@@ -42,10 +44,8 @@ async function ensureGuildConfig(guildId) {
 async function handleAutoModMessage(message) {
     if (message.author.bot) return; // Ignore bot messages
 
-    const config = await loadConfig(); // Load the current config
-    const guildConfig = await ensureGuildConfig(message.guild.id); // Get or create the config for the guild
+    const guildConfig = await ensureGuildConfig(message.guild.id); // Get or create the guild config
 
-    // Check if automod is enabled for this server
     if (!guildConfig.automodEnabled) {
         console.log(`Automod is disabled on server: ${message.guild.name}`);
         return; // Exit if automod is disabled
@@ -54,7 +54,6 @@ async function handleAutoModMessage(message) {
     const blacklistedWords = guildConfig.blacklistedWords;
     const messageContent = message.content.toLowerCase(); // Case-insensitive matching
 
-    // Check if the message contains any blacklisted word
     const containsBlacklistedWord = blacklistedWords.some(word =>
         messageContent.includes(word.toLowerCase())
     );
@@ -63,14 +62,13 @@ async function handleAutoModMessage(message) {
         try {
             await message.delete(); // Delete the offending message
 
-            // Increment the user's warning count
             const userId = message.author.id;
             guildConfig.warnedUsers[userId] = (guildConfig.warnedUsers[userId] || 0) + 1;
 
-            // Save the updated configuration to the JSON file
-            await saveConfig(config);
+            const config = await loadConfig();
+            config.servers[message.guild.id] = guildConfig; // Update the guild's config
+            await saveConfig(config); // Save the updated config
 
-            // Notify the user in the channel
             await message.channel.send(
                 `<@${userId}>, You've said a blacklisted word and have been automatically warned. You now have ${guildConfig.warnedUsers[userId]} warning(s).`
             );

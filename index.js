@@ -7,20 +7,21 @@ const {
     clearBlacklistCommand, 
     currentBlacklistCommand, 
     automodToggleCommand, 
-    registerCommandsForGuilds 
-} = require('./commands'); // Import command handlers
-const { handleAutoModMessage } = require('./automod'); // Import automod logic
+    registerCommandsForGuilds, 
+    ensureGuildConfig // Import to initialize guild configs
+} = require('./commands'); 
+const { handleAutoModMessage } = require('./automod'); 
 
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds,           // Enables bot to interact within guilds
-        GatewayIntentBits.GuildMessages,    // Enables bot to receive guild messages
-        GatewayIntentBits.MessageContent,   // Allows reading message content (for automod logic)
-        GatewayIntentBits.GuildMembers      // Allows accessing guild member information
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent, 
+        GatewayIntentBits.GuildMembers 
     ]
 });
 
-// Event triggered once the bot successfully logs in
+// Event triggered when the bot logs in successfully
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
 
@@ -33,10 +34,15 @@ client.once('ready', async () => {
     }
 });
 
-// Register commands when the bot joins a new guild
+// Event triggered when the bot joins a new guild
 client.on(Events.GuildCreate, async guild => {
     try {
         console.log(`Joined new guild: ${guild.name} (${guild.id})`);
+
+        // Ensure the new guild has a config initialized
+        await ensureGuildConfig(guild.id); 
+
+        // Register commands for the new guild
         await registerCommandsForGuilds(client, guild.id);
     } catch (error) {
         console.error(`Error registering commands for new guild ${guild.name}:`, error);
@@ -45,7 +51,7 @@ client.on(Events.GuildCreate, async guild => {
 
 // Handle slash command interactions
 client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.isCommand()) return; // Ignore non-command interactions
+    if (!interaction.isCommand()) return;
 
     const { commandName } = interaction;
 
@@ -84,14 +90,14 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-// Monitor incoming messages for automod logic
+// Monitor messages for automod logic
 client.on(Events.MessageCreate, async message => {
     try {
-        await handleAutoModMessage(message); // Process message with automod logic
+        await handleAutoModMessage(message);
     } catch (error) {
         console.error('Error in automod message handler:', error);
     }
 });
 
-// Log the bot into Discord using the token from the .env file
+// Log the bot into Discord using the token from .env
 client.login(process.env.DISCORD_TOKEN);

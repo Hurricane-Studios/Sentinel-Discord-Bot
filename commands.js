@@ -4,101 +4,103 @@ const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 require('dotenv').config();
 
 // Path to the JSON file storing all guild configurations
-const configsPath = path.join(__dirname, 'serverConfigs.json');
+const configPath = path.join(__dirname, 'serverConfigs.json');
 
-// Load all guild configurations from JSON
-async function loadConfigs() {
+// Load the full configuration file from JSON
+async function loadConfig() {
     try {
-        const data = await fs.readFile(configsPath, 'utf-8');
+        const data = await fs.readFile(configPath, 'utf-8');
         return JSON.parse(data);
     } catch (error) {
         console.error('Failed to load server configs:', error);
-        return {}; // Return empty object if the file doesn't exist or is corrupted
+        return { servers: {} }; // Default to an empty servers object
     }
 }
 
-// Save all guild configurations back to JSON
-async function saveConfigs(configs) {
+// Save the updated configuration back to JSON
+async function saveConfig(config) {
     try {
-        await fs.writeFile(configsPath, JSON.stringify(configs, null, 2));
+        await fs.writeFile(configPath, JSON.stringify(config, null, 2));
     } catch (error) {
         console.error('Failed to save server configs:', error);
     }
 }
 
-// Ensure a guild has a default configuration
-async function ensureGuildConfig(guildId) {
-    const configs = await loadConfigs();
 
-    if (!configs[guildId]) {
-        configs[guildId] = {
-            blacklistedWords: [],
-            warnedUsers: {},
+// Ensure that the guild has a default configuration
+async function ensureGuildConfig(guildId) {
+    const config = await loadConfig();
+
+    // Ensure that the guild's configuration exists
+    if (!config.servers[guildId]) {
+        config.servers[guildId] = {
             automodEnabled: true,
+            blacklistedWords: [],
+            warnedUsers: {}
         };
-        await saveConfigs(configs);
+        await saveConfig(config); // Save the new configuration
     }
 
-    return configs[guildId];
+    return config.servers[guildId];
 }
 
 // Add a warning to a user in a specific guild
 async function addWarning(guildId, userId) {
-    const configs = await loadConfigs();
+    const config = await loadConfig();
     const guildConfig = await ensureGuildConfig(guildId);
 
     guildConfig.warnedUsers[userId] = (guildConfig.warnedUsers[userId] || 0) + 1;
-    configs[guildId] = guildConfig;
-
-    await saveConfigs(configs);
+    config.servers[guildId] = guildConfig;
+    await saveConfig(config);
 }
 
 // Clear warnings for a user in a specific guild
 async function clearWarnings(guildId, userId, amount = 0) {
-    const configs = await loadConfigs();
+    const config = await loadConfig();
     const guildConfig = await ensureGuildConfig(guildId);
 
     if (amount <= 0) {
-        delete guildConfig.warnedUsers[userId];
+        delete guildConfig.warnedUsers[userId]; // Clear all warnings
     } else {
         guildConfig.warnedUsers[userId] = Math.max(0, (guildConfig.warnedUsers[userId] || 0) - amount);
     }
 
-    configs[guildId] = guildConfig;
-    await saveConfigs(configs);
+    config.servers[guildId] = guildConfig;
+    await saveConfig(config);
 }
 
 // Add blacklisted words to a guild’s config
 async function addBlacklistedWords(guildId, words) {
-    const configs = await loadConfigs();
+    const config = await loadConfig();
     const guildConfig = await ensureGuildConfig(guildId);
 
+    // Add words to the blacklist, ensuring no duplicates
     guildConfig.blacklistedWords = [...new Set([...guildConfig.blacklistedWords, ...words])];
-    configs[guildId] = guildConfig;
+    config.servers[guildId] = guildConfig;
 
-    await saveConfigs(configs);
+    await saveConfig(config);
 }
 
 // Clear the blacklist for a guild
 async function clearBlacklist(guildId) {
-    const configs = await loadConfigs();
+    const config = await loadConfig();
     const guildConfig = await ensureGuildConfig(guildId);
 
     guildConfig.blacklistedWords = [];
-    configs[guildId] = guildConfig;
+    config.servers[guildId] = guildConfig;
 
-    await saveConfigs(configs);
+    await saveConfig(config);
 }
 
 // Toggle automod for a guild
 async function toggleAutomod(guildId, isEnabled) {
-    const configs = await loadConfigs();
+    const config = await loadConfig();
     const guildConfig = await ensureGuildConfig(guildId);
 
     guildConfig.automodEnabled = isEnabled;
-    configs[guildId] = guildConfig;
+    config.servers[guildId] = guildConfig;
 
-    await saveConfigs(configs);
+    await saveConfig(config);
 }
 
 // Command handlers
@@ -122,12 +124,21 @@ async function clearWarnCommand(interaction) {
     await interaction.reply(`Warnings for <@${userId}> have been cleared.`);
 }
 
+// Command Handler: Add blacklisted words command
 async function addBlacklistedWordsCommand(interaction) {
-    const guildId = interaction.guildId;
-    const words = interaction.options.getString('words').split(/\s+/);
+    try {
+        const guildId = interaction.guildId;
+        const words = interaction.options.getString('words').split(/\s+/);
 
-    await addBlacklistedWords(guildId, words);
-    await interaction.reply(`Added to blacklist: ${words.join(', ')}`);
+        await addBlacklistedWords(guildId, words);
+        await interaction.reply(`Added to blacklist: ${words.join(', ')}`);
+    } catch (error) {
+        console.error('Error handling addblacklistedwords:', error);
+        await interaction.reply({
+            content: 'An error occurred while adding words to the blacklist.',
+            ephemeral: true
+        });
+    }
 }
 
 async function clearBlacklistCommand(interaction) {
