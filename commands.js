@@ -52,53 +52,113 @@ async function warnCommand(interaction) {
     try {
         const targetUser = interaction.options.getUser('user');
         if (!targetUser) {
-            return interaction.reply('Please mention a valid user to warn.', { ephemeral: true });
+            // Return early with a reply if the user is not valid
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: 'Please mention a valid user to warn.',
+                    ephemeral: true,
+                });
+            }
+            return; // Ensure no further execution happens
         }
 
         const warnings = await loadWarnings();
         const userId = targetUser.id;
 
+        // Increment warning count
         warnings[userId] = (warnings[userId] || 0) + 1;
         await saveWarnings(warnings);
 
-        await interaction.reply(
-            `<@${userId}> has been warned. They now have ${warnings[userId]} warning(s).`
-        );
+        // Respond with the updated warning count
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+                content: `<@${userId}> has been warned. They now have ${warnings[userId]} warning(s).`,
+                ephemeral: true,
+            });
+        }
     } catch (error) {
         console.error('Error in warnCommand:', error);
-        await interaction.reply('An error occurred while warning the user.', { ephemeral: true });
+
+        // Handle error gracefully if no previous reply was sent
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+                content: 'An error occurred while warning the user.',
+                ephemeral: true,
+            });
+        } else {
+            console.error('Cannot send reply: Interaction already replied or deferred.');
+        }
     }
 }
 
 // Handle /clearwarn command
 async function clearWarnCommand(interaction) {
     try {
-        const targetUser = interaction.options.getUser('user');
-        const warnAmount = interaction.options.getInteger('amount') || 0;
+        const targetUser = interaction.options.getUser('user'); // Get the user to clear warnings for
+        const warnAmount = interaction.options.getInteger('amount') || 0; // Default to 0 if not provided
 
+        // Check if the user is valid
         if (!targetUser) {
-            return interaction.reply('Please mention a valid user to clear warnings for.', { ephemeral: true });
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: 'Please mention a valid user to clear warnings for.',
+                    ephemeral: true,
+                });
+            }
+            return; // Stop further execution
         }
 
-        const warnings = await loadWarnings();
+        const warnings = await loadWarnings(); // Load existing warnings from the JSON file
         const userId = targetUser.id;
 
-        if (warnAmount <= 0 || !warnings[userId]) {
-            warnings[userId] = 0;
-            await interaction.reply(`All warnings for <@${userId}> have been cleared.`);
-        } else {
-            warnings[userId] = Math.max(0, warnings[userId] - warnAmount);
-            await interaction.reply(
-                `<@${userId}> has had ${warnAmount} warning(s) removed. They now have ${warnings[userId]} warning(s).`
-            );
+        // Check if the user has any warnings
+        if (!warnings[userId]) {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: `<@${userId}> has no warnings to clear.`,
+                    ephemeral: true,
+                });
+            }
+            return; // Stop further execution
         }
 
-        await saveWarnings(warnings);
+        // Clear all warnings if amount is 0 or negative
+        if (warnAmount <= 0) {
+            warnings[userId] = 0;
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: `All warnings for <@${userId}> have been cleared.`,
+                    ephemeral: true,
+                });
+            }
+        } else {
+            // Subtract the specified amount from the user's warnings
+            warnings[userId] = Math.max(0, warnings[userId] - warnAmount);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: `<@${userId}> has had ${warnAmount} warning(s) removed. They now have ${warnings[userId]} warning(s).`,
+                    ephemeral: true,
+                });
+            }
+        }
+
+        await saveWarnings(warnings); // Save the updated warnings to the JSON file
     } catch (error) {
         console.error('Error in clearWarnCommand:', error);
-        await interaction.reply('An error occurred while clearing warnings.', { ephemeral: true });
+
+        // Only reply if no previous reply or deferment has been sent
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+                content: 'An error occurred while clearing warnings.',
+                ephemeral: true,
+            });
+        } else {
+            console.error('Cannot send reply: Interaction already replied or deferred.');
+        }
     }
 }
+
+
 
 // Handle /addblacklistedwords command
 async function addBlacklistedWordsCommand(interaction) {

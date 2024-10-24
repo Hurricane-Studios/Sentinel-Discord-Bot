@@ -5,68 +5,77 @@ const {
     clearWarnCommand, 
     addBlacklistedWordsCommand, 
     registerCommandsForGuilds 
-} = require('./commands');
+} = require('./commands'); // Import command handlers
 const { handleAutoModMessage } = require('./automod'); // Import automod logic
 
+// Create a new Discord client with the necessary intents
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.Guilds,           // Enables bot to interact within guilds
+        GatewayIntentBits.GuildMessages,    // Enables bot to receive guild messages
+        GatewayIntentBits.MessageContent,   // Allows reading message content (for automod logic)
+        GatewayIntentBits.GuildMembers      // Allows accessing guild member information
     ]
 });
 
-// Bot ready event
+// Event triggered once the bot successfully logs in
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
 
-    // Register commands dynamically for all connected guilds
-    await registerCommandsForGuilds(client);
-
-    console.log('Bot has finished loading!');
+    // Register slash commands dynamically for all connected guilds
+    try {
+        await registerCommandsForGuilds(client);
+        console.log('Bot has finished loading!');
+    } catch (error) {
+        console.error('Error registering commands:', error);
+    }
 });
 
 // Handle slash command interactions
 client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.isCommand()) return;
+    if (!interaction.isCommand()) return; // Ignore non-command interactions
 
     const { commandName } = interaction;
 
     try {
-        // Handle each command with a deferred reply
-        if (commandName === 'warn') {
-            await interaction.deferReply({ ephemeral: true });
-            await warnCommand(interaction);
-        } else if (commandName === 'clearwarn') {
-            await interaction.deferReply({ ephemeral: true });
-            await clearWarnCommand(interaction);
-        } else if (commandName === 'addblacklistedwords') {
-            await addBlacklistedWordsCommand(interaction);
+        // Handle specific commands without unnecessary deferment
+        switch (commandName) {
+            case 'warn':
+                await warnCommand(interaction);
+                break;
+            case 'clearwarn':
+                await clearWarnCommand(interaction);
+                break;
+            case 'addblacklistedwords':
+                await addBlacklistedWordsCommand(interaction);
+                break;
+            default:
+                console.warn(`Unknown command: ${commandName}`);
         }
     } catch (error) {
         console.error(`Error handling ${commandName}:`, error);
 
-        // Handle the error gracefully to avoid InteractionAlreadyReplied issues
+        // Ensure we only send a reply if none has been sent yet
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ 
-                content: 'An error occurred while executing this command.', 
-                ephemeral: true 
+            await interaction.reply({
+                content: 'An unexpected error occurred while executing this command.',
+                ephemeral: true, // Only visible to the user
             });
         } else {
-            console.log(`Interaction for ${commandName} already handled.`);
+            console.log(`Interaction for ${commandName} was already handled.`);
         }
     }
 });
 
-// Handle all messages for automod logic
+// Monitor all incoming messages for automod logic
 client.on(Events.MessageCreate, async message => {
     try {
-        await handleAutoModMessage(message); // Check for blacklisted words and warn if necessary
+        // Process the message with automod logic
+        await handleAutoModMessage(message);
     } catch (error) {
         console.error('Error in automod message handler:', error);
     }
 });
 
-// Login the bot with token from .env
+// Log the bot into Discord using the token from the .env file
 client.login(process.env.DISCORD_TOKEN);
