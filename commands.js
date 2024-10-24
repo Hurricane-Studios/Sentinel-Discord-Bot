@@ -207,6 +207,74 @@ async function addBlacklistedWordsCommand(interaction) {
     }
 }
 
+// Handle /clearblacklist command
+async function clearBlacklistCommand(interaction) {
+    try {
+        // Load the current config
+        const config = await loadConfig();
+
+        // Reset the blacklist to an empty array
+        config.blacklistedWords = [];
+
+        // Save the updated config
+        await saveConfig(config);
+
+        // Send a reply confirming the blacklist has been cleared
+        await interaction.reply({
+            content: 'The blacklist has been cleared.',
+            ephemeral: true,
+        });
+
+    } catch (error) {
+        console.error('Error in clearBlacklistCommand:', error);
+
+        // Ensure only one reply is sent
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+                content: 'An error occurred while clearing the blacklist.',
+                ephemeral: true,
+            });
+        } else {
+            console.error('Cannot send reply: Interaction already replied.');
+        }
+    }
+}
+
+// Handle /currentblacklist command
+async function currentBlacklistCommand(interaction) {
+    try {
+        const config = await loadConfig(); // Load the config
+
+        const blacklist = config.blacklistedWords;
+
+        // Check if the blacklist is empty
+        if (blacklist.length === 0) {
+            console.log('The Blacklist config is currently empty. Please add blacklisted words...'); // Log message
+
+            await interaction.reply({
+                content: 'The blacklist is currently empty. Please add blacklisted words...',
+                ephemeral: true, // Visible only to the user
+            });
+        } else {
+            // Send the blacklist to the user
+            await interaction.reply({
+                content: `Current blacklist: ${blacklist.join(', ')}`,
+                ephemeral: true, // Visible only to the user
+            });
+        }
+    } catch (error) {
+        console.error('Error in currentBlacklistCommand:', error);
+
+        // Handle the error gracefully
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+                content: 'An error occurred while fetching the blacklist.',
+                ephemeral: true,
+            });
+        }
+    }
+}
+
 
 // Define and register slash commands
 const commands = [
@@ -236,8 +304,18 @@ const commands = [
         .addStringOption(option =>
             option.setName('words')
                 .setDescription('The words to blacklist, separated by spaces')
-                .setRequired(true))
+                .setRequired(true)),
+
+    new SlashCommandBuilder()
+        .setName('clearblacklist')
+        .setDescription('Clear all blacklisted words'),
+
+    new SlashCommandBuilder() // Register the new command
+        .setName('currentblacklist')
+        .setDescription('Show the current list of blacklisted words')
+
 ].map(command => command.toJSON());
+
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
@@ -262,5 +340,7 @@ module.exports = {
     warnCommand,
     clearWarnCommand,
     addBlacklistedWordsCommand,
-    registerCommandsForGuilds
+    clearBlacklistCommand,
+    currentBlacklistCommand,
+    registerCommandsForGuilds,
 };

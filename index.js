@@ -4,6 +4,8 @@ const {
     warnCommand, 
     clearWarnCommand, 
     addBlacklistedWordsCommand, 
+    clearBlacklistCommand,
+    currentBlacklistCommand, // Import the new command
     registerCommandsForGuilds 
 } = require('./commands'); // Import command handlers
 const { handleAutoModMessage } = require('./automod'); // Import automod logic
@@ -31,14 +33,12 @@ client.once('ready', async () => {
     }
 });
 
-// Handle slash command interactions
 client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.isCommand()) return; // Ignore non-command interactions
+    if (!interaction.isCommand()) return;
 
     const { commandName } = interaction;
 
     try {
-        // Handle specific commands without unnecessary deferment
         switch (commandName) {
             case 'warn':
                 await warnCommand(interaction);
@@ -49,23 +49,27 @@ client.on(Events.InteractionCreate, async interaction => {
             case 'addblacklistedwords':
                 await addBlacklistedWordsCommand(interaction);
                 break;
+            case 'clearblacklist':
+                await clearBlacklistCommand(interaction);
+                break;
+            case 'currentblacklist': // Add the new case
+                await currentBlacklistCommand(interaction);
+                break;
             default:
                 console.warn(`Unknown command: ${commandName}`);
         }
     } catch (error) {
         console.error(`Error handling ${commandName}:`, error);
 
-        // Ensure we only send a reply if none has been sent yet
         if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({
                 content: 'An unexpected error occurred while executing this command.',
-                ephemeral: true, // Only visible to the user
+                ephemeral: true,
             });
-        } else {
-            console.log(`Interaction for ${commandName} was already handled.`);
         }
     }
 });
+
 
 // Monitor all incoming messages for automod logic
 client.on(Events.MessageCreate, async message => {
@@ -76,6 +80,8 @@ client.on(Events.MessageCreate, async message => {
         console.error('Error in automod message handler:', error);
     }
 });
+
+
 
 // Log the bot into Discord using the token from the .env file
 client.login(process.env.DISCORD_TOKEN);

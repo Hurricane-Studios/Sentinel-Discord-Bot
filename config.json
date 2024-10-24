@@ -1,14 +1,3 @@
 {
-  "blacklistedWords": [
-    "fuck",
-    "shit",
-    "bitch",
-    "nig",
-    "nigga",
-    "nigger",
-    "chink",
-    "cracker",
-    "black",
-    "people"
-  ]
+  "blacklistedWords": []
 }
