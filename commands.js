@@ -199,19 +199,34 @@ const commands = [
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
-async function registerCommandsForGuilds(client) {
+async function registerCommandsForGuilds(client, guildId = null) {
     try {
         console.log('Refreshing commands.');
-        const guilds = await client.guilds.fetch();
 
-        for (const guild of guilds.values()) {
-            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guild.id), { body: commands });
-            console.log(`Registered commands for guild: ${guild.name} (${guild.id})`);
+        if (guildId) {
+            // Register commands for a single guild
+            await rest.put(
+                Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId),
+                { body: commands }
+            );
+            console.log(`Registered commands for guild: ${guildId}`);
+        } else {
+            // Register commands for all connected guilds
+            const guilds = await client.guilds.fetch();
+
+            for (const guild of guilds.values()) {
+                await rest.put(
+                    Routes.applicationGuildCommands(process.env.CLIENT_ID, guild.id),
+                    { body: commands }
+                );
+                console.log(`Registered commands for guild: ${guild.name} (${guild.id})`);
+            }
         }
     } catch (error) {
         console.error('Error registering commands:', error);
     }
 }
+
 
 module.exports = {
     warnCommand,
