@@ -1,3 +1,11 @@
 {
-    "blacklistedWords": ["badword", "curseword"]
+  "blacklistedWords": [
+    "fuck",
+    "shit",
+    "bitch",
+    "nig",
+    "nigga",
+    "nigger",
+    "chink"
+  ]
 }
