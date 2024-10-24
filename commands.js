@@ -252,8 +252,6 @@ async function warnCommand(interaction) {
     }
 }
 
-
-
 async function clearWarnCommand(interaction) {
     const guildId = interaction.guildId;
     const user = interaction.options.getUser('user');
@@ -282,6 +280,12 @@ async function clearWarnCommand(interaction) {
 
     // Send the embed message
     await interaction.reply({ embeds: [embed] });
+
+    // Log the action
+    await sendLog(
+        interaction,
+        `${interaction.user.tag} used /clearwarn to remove ${amount} warnings from ${user.tag}. Reason: ${reason}. Current warnings: ${currentWarnings}`
+    );
 }
 
 async function currentWarnsCommand(interaction) {
@@ -300,9 +304,15 @@ async function currentWarnsCommand(interaction) {
         )
         .setTimestamp();
 
+    // Send the embed message
     await interaction.reply({ embeds: [embed] });
-}
 
+    // Log the action
+    await sendLog(
+        interaction,
+        `${interaction.user.tag} used /currentwarns to check warnings for ${user.tag}. Total warnings: ${warnings}`
+    );
+}
 
 // Command Handler: Add blacklisted words command
 async function addBlacklistedWordsCommand(interaction) {
@@ -312,6 +322,12 @@ async function addBlacklistedWordsCommand(interaction) {
 
         await addBlacklistedWords(guildId, words);
         await interaction.reply(`Added to blacklist: ${words.join(', ')}`);
+
+        // Log the action
+        await sendLog(
+            interaction,
+            `${interaction.user.tag} used /addblacklistedwords to add: ${words.join(', ')}`
+        );
     } catch (error) {
         console.error('Error handling addblacklistedwords:', error);
         await interaction.reply({
@@ -320,6 +336,7 @@ async function addBlacklistedWordsCommand(interaction) {
         });
     }
 }
+
 
 async function clearBlacklistCommand(interaction) {
     const guildId = interaction.guildId;
@@ -333,7 +350,14 @@ async function clearBlacklistCommand(interaction) {
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
+
+    // Log the action
+    await sendLog(
+        interaction,
+        `${interaction.user.tag} used /clearblacklist to remove all blacklisted words.`
+    );
 }
+
 
 
 async function currentBlacklistCommand(interaction) {
@@ -371,7 +395,14 @@ async function automodToggleCommand(interaction) {
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
+
+    // Log the action
+    await sendLog(
+        interaction,
+        `${interaction.user.tag} used /automod to ${isEnabled ? 'enable' : 'disable'} automod.`
+    );
 }
+
 
 
 // Define slash commands
