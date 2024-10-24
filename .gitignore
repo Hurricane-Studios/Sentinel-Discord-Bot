@@ -22,5 +22,6 @@ Thumbs.db
 logs/
 *.log
 
-#ignore warnings.json
+#ignores vital jsons
 warnings.json
+serverconfigs.json

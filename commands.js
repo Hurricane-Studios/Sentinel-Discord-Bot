@@ -1,334 +1,200 @@
-const fs = require('fs').promises; // Use promises API for async file handling
+const fs = require('fs').promises;
 const path = require('path');
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 require('dotenv').config();
 
-// Paths for the JSON files
-const warningsPath = path.join(__dirname, 'warnings.json');
-const configPath = path.join(__dirname, 'config.json');
+// Path to the JSON file storing all guild configurations
+const configsPath = path.join(__dirname, 'serverConfigs.json');
 
-// Load warnings from JSON asynchronously
-async function loadWarnings() {
+// Load all guild configurations from JSON
+async function loadConfigs() {
     try {
-        const data = await fs.readFile(warningsPath, 'utf-8');
+        const data = await fs.readFile(configsPath, 'utf-8');
         return JSON.parse(data);
     } catch (error) {
-        console.error('Failed to load warnings:', error);
-        return {}; // Return empty object if file doesn't exist or is corrupted
+        console.error('Failed to load server configs:', error);
+        return {}; // Return empty object if the file doesn't exist or is corrupted
     }
 }
 
-// Save warnings to JSON asynchronously
-async function saveWarnings(warnings) {
+// Save all guild configurations back to JSON
+async function saveConfigs(configs) {
     try {
-        await fs.writeFile(warningsPath, JSON.stringify(warnings, null, 2));
+        await fs.writeFile(configsPath, JSON.stringify(configs, null, 2));
     } catch (error) {
-        console.error('Failed to save warnings:', error);
+        console.error('Failed to save server configs:', error);
     }
 }
 
-// Load config from JSON asynchronously
-async function loadConfig() {
-    try {
-        const data = await fs.readFile(configPath, 'utf-8');
-        return JSON.parse(data);
-    } catch (error) {
-        console.error('Failed to load config:', error);
-        return { blacklistedWords: [] }; // Default to an empty blacklist
+// Ensure a guild has a default configuration
+async function ensureGuildConfig(guildId) {
+    const configs = await loadConfigs();
+
+    if (!configs[guildId]) {
+        configs[guildId] = {
+            blacklistedWords: [],
+            warnedUsers: {},
+            automodEnabled: true,
+        };
+        await saveConfigs(configs);
     }
+
+    return configs[guildId];
 }
 
-// Save config to JSON asynchronously
-async function saveConfig(config) {
-    try {
-        await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-    } catch (error) {
-        console.error('Failed to save config:', error);
-    }
+// Add a warning to a user in a specific guild
+async function addWarning(guildId, userId) {
+    const configs = await loadConfigs();
+    const guildConfig = await ensureGuildConfig(guildId);
+
+    guildConfig.warnedUsers[userId] = (guildConfig.warnedUsers[userId] || 0) + 1;
+    configs[guildId] = guildConfig;
+
+    await saveConfigs(configs);
 }
 
-// Handle /warn command
+// Clear warnings for a user in a specific guild
+async function clearWarnings(guildId, userId, amount = 0) {
+    const configs = await loadConfigs();
+    const guildConfig = await ensureGuildConfig(guildId);
+
+    if (amount <= 0) {
+        delete guildConfig.warnedUsers[userId];
+    } else {
+        guildConfig.warnedUsers[userId] = Math.max(0, (guildConfig.warnedUsers[userId] || 0) - amount);
+    }
+
+    configs[guildId] = guildConfig;
+    await saveConfigs(configs);
+}
+
+// Add blacklisted words to a guild’s config
+async function addBlacklistedWords(guildId, words) {
+    const configs = await loadConfigs();
+    const guildConfig = await ensureGuildConfig(guildId);
+
+    guildConfig.blacklistedWords = [...new Set([...guildConfig.blacklistedWords, ...words])];
+    configs[guildId] = guildConfig;
+
+    await saveConfigs(configs);
+}
+
+// Clear the blacklist for a guild
+async function clearBlacklist(guildId) {
+    const configs = await loadConfigs();
+    const guildConfig = await ensureGuildConfig(guildId);
+
+    guildConfig.blacklistedWords = [];
+    configs[guildId] = guildConfig;
+
+    await saveConfigs(configs);
+}
+
+// Toggle automod for a guild
+async function toggleAutomod(guildId, isEnabled) {
+    const configs = await loadConfigs();
+    const guildConfig = await ensureGuildConfig(guildId);
+
+    guildConfig.automodEnabled = isEnabled;
+    configs[guildId] = guildConfig;
+
+    await saveConfigs(configs);
+}
+
+// Command handlers
 async function warnCommand(interaction) {
-    try {
-        const targetUser = interaction.options.getUser('user');
-        if (!targetUser) {
-            // Return early with a reply if the user is not valid
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: 'Please mention a valid user to warn.',
-                    ephemeral: true,
-                });
-            }
-            return; // Ensure no further execution happens
-        }
+    const guildId = interaction.guildId;
+    const userId = interaction.options.getUser('user').id;
 
-        const warnings = await loadWarnings();
-        const userId = targetUser.id;
+    await addWarning(guildId, userId);
+    const config = await ensureGuildConfig(guildId);
+    const warnings = config.warnedUsers[userId] || 0;
 
-        // Increment warning count
-        warnings[userId] = (warnings[userId] || 0) + 1;
-        await saveWarnings(warnings);
-
-        // Respond with the updated warning count
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-                content: `<@${userId}> has been warned. They now have ${warnings[userId]} warning(s).`,
-                ephemeral: true,
-            });
-        }
-    } catch (error) {
-        console.error('Error in warnCommand:', error);
-
-        // Handle error gracefully if no previous reply was sent
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-                content: 'An error occurred while warning the user.',
-                ephemeral: true,
-            });
-        } else {
-            console.error('Cannot send reply: Interaction already replied or deferred.');
-        }
-    }
+    await interaction.reply(`<@${userId}> now has ${warnings} warning(s).`);
 }
 
-// Handle /clearwarn command
 async function clearWarnCommand(interaction) {
-    try {
-        const targetUser = interaction.options.getUser('user'); // Get the user to clear warnings for
-        const warnAmount = interaction.options.getInteger('amount') || 0; // Default to 0 if not provided
+    const guildId = interaction.guildId;
+    const userId = interaction.options.getUser('user').id;
+    const amount = interaction.options.getInteger('amount') || 0;
 
-        // Check if the user is valid
-        if (!targetUser) {
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: 'Please mention a valid user to clear warnings for.',
-                    ephemeral: true,
-                });
-            }
-            return; // Stop further execution
-        }
-
-        const warnings = await loadWarnings(); // Load existing warnings from the JSON file
-        const userId = targetUser.id;
-
-        // Check if the user has any warnings
-        if (!warnings[userId]) {
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: `<@${userId}> has no warnings to clear.`,
-                    ephemeral: true,
-                });
-            }
-            return; // Stop further execution
-        }
-
-        // Clear all warnings if amount is 0 or negative
-        if (warnAmount <= 0) {
-            warnings[userId] = 0;
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: `All warnings for <@${userId}> have been cleared.`,
-                    ephemeral: true,
-                });
-            }
-        } else {
-            // Subtract the specified amount from the user's warnings
-            warnings[userId] = Math.max(0, warnings[userId] - warnAmount);
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: `<@${userId}> has had ${warnAmount} warning(s) removed. They now have ${warnings[userId]} warning(s).`,
-                    ephemeral: true,
-                });
-            }
-        }
-
-        await saveWarnings(warnings); // Save the updated warnings to the JSON file
-    } catch (error) {
-        console.error('Error in clearWarnCommand:', error);
-
-        // Only reply if no previous reply or deferment has been sent
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-                content: 'An error occurred while clearing warnings.',
-                ephemeral: true,
-            });
-        } else {
-            console.error('Cannot send reply: Interaction already replied or deferred.');
-        }
-    }
+    await clearWarnings(guildId, userId, amount);
+    await interaction.reply(`Warnings for <@${userId}> have been cleared.`);
 }
 
-
-
-// Handle /addblacklistedwords command
 async function addBlacklistedWordsCommand(interaction) {
-    console.log('Received /addblacklistedwords command');
+    const guildId = interaction.guildId;
+    const words = interaction.options.getString('words').split(/\s+/);
 
-    const words = interaction.options.getString('words');
-    if (!words || words.trim() === '') {
-        console.log('No valid words provided');
-        // Ensure this is the only reply sent
-        return interaction.reply({ content: 'Please provide valid words to add to the blacklist.', ephemeral: true });
-    }
-
-    try {
-        const config = await loadConfig();
-        const newWords = words.split(/\s+/).filter(word => word.trim() !== '');
-
-        if (newWords.length === 0) {
-            console.log('No new words found after filtering');
-            // Ensure this is the only reply sent
-            return interaction.reply({ content: 'No valid words provided.', ephemeral: true });
-        }
-
-        // Add new words to the blacklist, avoiding duplicates
-        config.blacklistedWords = [...new Set([...config.blacklistedWords, ...newWords])];
-        await saveConfig(config);
-
-        console.log(`Added words: ${newWords.join(', ')}`);
-
-        // Ensure this is the only reply sent
-        await interaction.reply({
-            content: `The following words have been added to the blacklist: ${newWords.join(', ')}`,
-            ephemeral: true,
-        });
-    } catch (error) {
-        console.error('Error handling addblacklistedwords command:', error);
-        
-        // Only reply if no reply has been sent yet
-        if (!interaction.replied) {
-            await interaction.reply({
-                content: 'An error occurred while adding words to the blacklist.',
-                ephemeral: true,
-            });
-        } else {
-            console.error('Cannot send reply: Interaction already replied.');
-        }
-    }
+    await addBlacklistedWords(guildId, words);
+    await interaction.reply(`Added to blacklist: ${words.join(', ')}`);
 }
 
-// Handle /clearblacklist command
 async function clearBlacklistCommand(interaction) {
-    try {
-        // Load the current config
-        const config = await loadConfig();
+    const guildId = interaction.guildId;
 
-        // Reset the blacklist to an empty array
-        config.blacklistedWords = [];
-
-        // Save the updated config
-        await saveConfig(config);
-
-        // Send a reply confirming the blacklist has been cleared
-        await interaction.reply({
-            content: 'The blacklist has been cleared.',
-            ephemeral: true,
-        });
-
-    } catch (error) {
-        console.error('Error in clearBlacklistCommand:', error);
-
-        // Ensure only one reply is sent
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-                content: 'An error occurred while clearing the blacklist.',
-                ephemeral: true,
-            });
-        } else {
-            console.error('Cannot send reply: Interaction already replied.');
-        }
-    }
+    await clearBlacklist(guildId);
+    await interaction.reply('Blacklist has been cleared.');
 }
 
-// Handle /currentblacklist command
 async function currentBlacklistCommand(interaction) {
-    try {
-        const config = await loadConfig(); // Load the config
+    const guildId = interaction.guildId;
+    const config = await ensureGuildConfig(guildId);
+    const blacklist = config.blacklistedWords;
 
-        const blacklist = config.blacklistedWords;
-
-        // Check if the blacklist is empty
-        if (blacklist.length === 0) {
-            console.log('The Blacklist config is currently empty. Please add blacklisted words...'); // Log message
-
-            await interaction.reply({
-                content: 'The blacklist is currently empty. Please add blacklisted words...',
-                ephemeral: true, // Visible only to the user
-            });
-        } else {
-            // Send the blacklist to the user
-            await interaction.reply({
-                content: `Current blacklist: ${blacklist.join(', ')}`,
-                ephemeral: true, // Visible only to the user
-            });
-        }
-    } catch (error) {
-        console.error('Error in currentBlacklistCommand:', error);
-
-        // Handle the error gracefully
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-                content: 'An error occurred while fetching the blacklist.',
-                ephemeral: true,
-            });
-        }
+    if (blacklist.length === 0) {
+        await interaction.reply('The blacklist is empty.');
+    } else {
+        await interaction.reply(`Current blacklist: ${blacklist.join(', ')}`);
     }
 }
 
+async function automodToggleCommand(interaction) {
+    const guildId = interaction.guildId;
+    const toggle = interaction.options.getString('toggle').toLowerCase();
+    const isEnabled = toggle === 'y';
 
-// Define and register slash commands
+    await toggleAutomod(guildId, isEnabled);
+    await interaction.reply(`Automod has been ${isEnabled ? 'enabled' : 'disabled'}.`);
+}
+
+// Define slash commands
 const commands = [
     new SlashCommandBuilder()
         .setName('warn')
         .setDescription('Warn a user')
-        .addUserOption(option =>
-            option.setName('user')
-                .setDescription('The user to warn')
-                .setRequired(true)),
+        .addUserOption(option => option.setName('user').setDescription('The user to warn').setRequired(true)),
 
     new SlashCommandBuilder()
         .setName('clearwarn')
         .setDescription('Clear warnings for a user')
-        .addUserOption(option =>
-            option.setName('user')
-                .setDescription('The user to clear warnings for')
-                .setRequired(true))
-        .addIntegerOption(option =>
-            option.setName('amount')
-                .setDescription('The amount of warnings to remove.')
-                .setRequired(false)),
+        .addUserOption(option => option.setName('user').setDescription('The user to clear warnings for').setRequired(true))
+        .addIntegerOption(option => option.setName('amount').setDescription('The amount of warnings to remove.')),
 
     new SlashCommandBuilder()
         .setName('addblacklistedwords')
         .setDescription('Add words to the blacklist')
-        .addStringOption(option =>
-            option.setName('words')
-                .setDescription('The words to blacklist, separated by spaces')
-                .setRequired(true)),
+        .addStringOption(option => option.setName('words').setDescription('The words to blacklist').setRequired(true)),
+
+    new SlashCommandBuilder().setName('clearblacklist').setDescription('Clear all blacklisted words'),
+
+    new SlashCommandBuilder().setName('currentblacklist').setDescription('Show the current blacklist'),
 
     new SlashCommandBuilder()
-        .setName('clearblacklist')
-        .setDescription('Clear all blacklisted words'),
-
-    new SlashCommandBuilder() // Register the new command
-        .setName('currentblacklist')
-        .setDescription('Show the current list of blacklisted words')
-
+        .setName('automod')
+        .setDescription('Toggle automod on or off')
+        .addStringOption(option => option.setName('toggle').setDescription('Enable (y) or disable (n)').setRequired(true)),
 ].map(command => command.toJSON());
-
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 async function registerCommandsForGuilds(client) {
     try {
-        console.log('Started refreshing application (/) commands.');
+        console.log('Refreshing commands.');
         const guilds = await client.guilds.fetch();
 
         for (const guild of guilds.values()) {
-            await rest.put(
-                Routes.applicationGuildCommands(process.env.CLIENT_ID, guild.id),
-                { body: commands }
-            );
+            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guild.id), { body: commands });
             console.log(`Registered commands for guild: ${guild.name} (${guild.id})`);
         }
     } catch (error) {
@@ -342,5 +208,6 @@ module.exports = {
     addBlacklistedWordsCommand,
     clearBlacklistCommand,
     currentBlacklistCommand,
+    automodToggleCommand,
     registerCommandsForGuilds,
 };

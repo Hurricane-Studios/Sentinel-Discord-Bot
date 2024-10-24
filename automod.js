@@ -1,35 +1,57 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 
-// Load warnings and config
-const warningsPath = path.join(__dirname, 'warnings.json');
-const configPath = path.join(__dirname, 'config.json');
+// Path to the JSON file storing all guild configurations
+const configPath = path.join(__dirname, 'serverConfigs.json');
 
-// Load warnings from JSON
-function loadWarnings() {
-    if (!fs.existsSync(warningsPath)) return {};
-    const data = fs.readFileSync(warningsPath, 'utf-8');
-    return JSON.parse(data);
+// Load the full configuration file from JSON
+async function loadConfig() {
+    try {
+        const data = await fs.readFile(configPath, 'utf-8');
+        return JSON.parse(data);
+    } catch (error) {
+        console.error('Failed to load server configs:', error);
+        return { servers: {} }; // Return a default object if loading fails
+    }
 }
 
-// Save warnings to JSON
-function saveWarnings(warnings) {
-    fs.writeFileSync(warningsPath, JSON.stringify(warnings, null, 2));
+// Save the updated configuration back to JSON
+async function saveConfig(config) {
+    try {
+        await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+    } catch (error) {
+        console.error('Failed to save server configs:', error);
+    }
 }
 
-// Load config from JSON
-function loadConfig() {
-    if (!fs.existsSync(configPath)) return { blacklistedWords: [] };
-    const data = fs.readFileSync(configPath, 'utf-8');
-    return JSON.parse(data);
+// Ensure a guild has a default configuration
+async function ensureGuildConfig(guildId) {
+    const config = await loadConfig();
+    if (!config.servers[guildId]) {
+        config.servers[guildId] = {
+            automodEnabled: true,
+            blacklistedWords: [],
+            warnedUsers: {}
+        };
+        await saveConfig(config); // Save the new config to file
+    }
+    return config.servers[guildId];
 }
 
 // Automod function to monitor messages
 async function handleAutoModMessage(message) {
     if (message.author.bot) return; // Ignore bot messages
 
-    const config = loadConfig();
-    const blacklistedWords = config.blacklistedWords || [];
+    const config = await loadConfig(); // Load the current config
+    const guildConfig = await ensureGuildConfig(message.guild.id); // Get or create the config for the guild
+
+    // Check if automod is enabled for this server
+    if (!guildConfig.automodEnabled) {
+        console.log(`Automod is disabled on server: ${message.guild.name}`);
+        return; // Exit if automod is disabled
+    }
+
+    const blacklistedWords = guildConfig.blacklistedWords;
     const messageContent = message.content.toLowerCase(); // Case-insensitive matching
 
     // Check if the message contains any blacklisted word
@@ -38,20 +60,25 @@ async function handleAutoModMessage(message) {
     );
 
     if (containsBlacklistedWord) {
-        // Delete the message
-        await message.delete();
+        try {
+            await message.delete(); // Delete the offending message
 
-        // Warn the user
-        const warnings = loadWarnings();
-        const userId = message.author.id;
+            // Increment the user's warning count
+            const userId = message.author.id;
+            guildConfig.warnedUsers[userId] = (guildConfig.warnedUsers[userId] || 0) + 1;
 
-        warnings[userId] = (warnings[userId] || 0) + 1;
-        saveWarnings(warnings);
+            // Save the updated configuration to the JSON file
+            await saveConfig(config);
 
-        // Send a warning message to the user
-        await message.channel.send(
-            `<@${userId}>, You've said a blacklisted word and have been automatically warned. You now have ${warnings[userId]} warning(s).`
-        );
+            // Notify the user in the channel
+            await message.channel.send(
+                `<@${userId}>, You've said a blacklisted word and have been automatically warned. You now have ${guildConfig.warnedUsers[userId]} warning(s).`
+            );
+
+            console.log(`Automod: Deleted a message from ${message.author.tag} in ${message.guild.name}`);
+        } catch (error) {
+            console.error('Error handling blacklisted word message:', error);
+        }
     }
 }
 

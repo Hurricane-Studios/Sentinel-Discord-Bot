@@ -4,13 +4,13 @@ const {
     warnCommand, 
     clearWarnCommand, 
     addBlacklistedWordsCommand, 
-    clearBlacklistCommand,
-    currentBlacklistCommand, // Import the new command
+    clearBlacklistCommand, 
+    currentBlacklistCommand, 
+    automodToggleCommand, 
     registerCommandsForGuilds 
 } = require('./commands'); // Import command handlers
 const { handleAutoModMessage } = require('./automod'); // Import automod logic
 
-// Create a new Discord client with the necessary intents
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,           // Enables bot to interact within guilds
@@ -24,7 +24,7 @@ const client = new Client({
 client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
 
-    // Register slash commands dynamically for all connected guilds
+    // Register commands for all connected guilds
     try {
         await registerCommandsForGuilds(client);
         console.log('Bot has finished loading!');
@@ -33,8 +33,19 @@ client.once('ready', async () => {
     }
 });
 
+// Register commands when the bot joins a new guild
+client.on(Events.GuildCreate, async guild => {
+    try {
+        console.log(`Joined new guild: ${guild.name} (${guild.id})`);
+        await registerCommandsForGuilds(client, guild.id);
+    } catch (error) {
+        console.error(`Error registering commands for new guild ${guild.name}:`, error);
+    }
+});
+
+// Handle slash command interactions
 client.on(Events.InteractionCreate, async interaction => {
-    if (!interaction.isCommand()) return;
+    if (!interaction.isCommand()) return; // Ignore non-command interactions
 
     const { commandName } = interaction;
 
@@ -52,8 +63,11 @@ client.on(Events.InteractionCreate, async interaction => {
             case 'clearblacklist':
                 await clearBlacklistCommand(interaction);
                 break;
-            case 'currentblacklist': // Add the new case
+            case 'currentblacklist':
                 await currentBlacklistCommand(interaction);
+                break;
+            case 'automod':
+                await automodToggleCommand(interaction);
                 break;
             default:
                 console.warn(`Unknown command: ${commandName}`);
@@ -70,18 +84,14 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 });
 
-
-// Monitor all incoming messages for automod logic
+// Monitor incoming messages for automod logic
 client.on(Events.MessageCreate, async message => {
     try {
-        // Process the message with automod logic
-        await handleAutoModMessage(message);
+        await handleAutoModMessage(message); // Process message with automod logic
     } catch (error) {
         console.error('Error in automod message handler:', error);
     }
 });
-
-
 
 // Log the bot into Discord using the token from the .env file
 client.login(process.env.DISCORD_TOKEN);
