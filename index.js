@@ -10,14 +10,15 @@ const {
     registerCommandsForGuilds 
 } = require('./commands');
 const { handleAutoModMessage } = require('./automod');
-const { exec } = require('child_process'); // Import child_process
+const { exec } = require('child_process');
+const { setBotStatus } = require('./status'); // Import setBotStatus
 
 const client = new Client({
     intents: [
-        GatewayIntentBits.Guilds,           
-        GatewayIntentBits.GuildMessages,    
-        GatewayIntentBits.MessageContent,   
-        GatewayIntentBits.GuildMembers      
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
     ]
 });
 
@@ -26,9 +27,10 @@ client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
     try {
         await registerCommandsForGuilds(client); // Bulk registration
+        await setBotStatus(client); // Set the status message
         console.log('Bot has finished loading!');
     } catch (error) {
-        console.error('Error registering commands:', error);
+        console.error('Error during startup:', error);
     }
 });
 
@@ -36,10 +38,9 @@ client.once('ready', async () => {
 client.on(Events.GuildCreate, async guild => {
     try {
         console.log(`Joined new guild: ${guild.name} (${guild.id})`);
-        await registerCommandsForGuilds(client, guild.id); // Register commands for the new guild
-
+        await registerCommandsForGuilds(client, guild.id);
         console.log('Restarting bot to apply new guild settings...');
-        restartBot(); // Call the restart function
+        restartBot();
     } catch (error) {
         console.error(`Error registering commands for new guild ${guild.name}:`, error);
     }
@@ -63,7 +64,7 @@ function restartBot() {
         }
         console.log(`Stdout: ${stdout}`);
         console.log('Bot has finished restarting and has loaded.');
-        process.exit(0); // Exit the current process
+        process.exit(0);
     });
 }
 
